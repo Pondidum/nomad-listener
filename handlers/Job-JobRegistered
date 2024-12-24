@@ -1,0 +1,7 @@
+#!/bin/sh
+
+job_name=$(jq -r '.Payload.Job.Name' "$1")
+
+echo "==> On Job:JobRegistered"
+echo "    Job: ${job_name}"
+echo "--> Done"
