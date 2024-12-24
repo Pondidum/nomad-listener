@@ -4,36 +4,28 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path"
 )
 
 func main() {
-	if err := runMain(context.Background()); err != nil {
+	if err := runMain(context.Background(), os.Args[:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func runMain(ctx context.Context) error {
-	addr := os.Getenv("NOMAD_ADDR")
-	if addr == "" {
-		return errors.New("NOMAD_ADDR must be set")
-	}
+func runMain(ctx context.Context, args []string) error {
 
-	nomadAddr, err := url.Parse(addr)
+	opts, err := readFlags(ctx, args)
 	if err != nil {
 		return err
 	}
 
-	nomadAddr = nomadAddr.JoinPath("v1/event/stream")
-
-	resp, err := http.Get(nomadAddr.String())
+	resp, err := http.Get(opts.StreamAddr)
 	if err != nil {
 		return err
 	}
@@ -57,7 +49,6 @@ func runMain(ctx context.Context) error {
 		}
 
 		for _, event := range events.Events {
-			//fmt.Println(time.Now(), event.Topic, event.Type, event.Key, event.Index)
 
 			eventKey, err := getEventKey(event)
 			if err != nil {
@@ -93,7 +84,6 @@ func runMain(ctx context.Context) error {
 		}
 	}
 
-	return nil
 }
 
 func scanHandlers(ctx context.Context) (map[string]string, error) {
