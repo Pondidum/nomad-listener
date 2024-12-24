@@ -49,41 +49,51 @@ func runMain(ctx context.Context, args []string) error {
 		}
 
 		for _, event := range events.Events {
+			if err := processEvent(ctx, handlers, event); err != nil {
+				if opts.FailFast {
+					return err
+				}
 
-			eventKey, err := getEventKey(event)
-			if err != nil {
-				return err
+				fmt.Println("Error:", err.Error())
 			}
-
-			handler, found := handlers[eventKey]
-			if !found {
-				continue
-			}
-
-			fmt.Println("-->", handler)
-
-			tmp, err := os.CreateTemp("", "nomad-event-*.json")
-			if err != nil {
-				return err
-			}
-			defer tmp.Close() // just in case we error before the real .Close() call
-
-			if _, err := tmp.Write(event); err != nil {
-				return err
-			}
-			tmp.Close()
-			fmt.Println("    ", tmp.Name())
-			cmd := exec.CommandContext(ctx, handler, tmp.Name())
-			cmd.Stdin = os.Stdin
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				return err
-			}
-
 		}
 	}
 
+}
+
+func processEvent(ctx context.Context, handlers map[string]string, event json.RawMessage) error {
+	eventKey, err := getEventKey(event)
+	if err != nil {
+		return err
+	}
+
+	handler, found := handlers[eventKey]
+	if !found {
+		return nil
+	}
+
+	fmt.Println("-->", handler)
+
+	tmp, err := os.CreateTemp("", "nomad-event-*.json")
+	if err != nil {
+		return err
+	}
+	defer tmp.Close() // just in case we error before the real .Close() call
+
+	if _, err := tmp.Write(event); err != nil {
+		return err
+	}
+	tmp.Close()
+
+	cmd := exec.CommandContext(ctx, handler, tmp.Name())
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func scanHandlers(ctx context.Context) (map[string]string, error) {

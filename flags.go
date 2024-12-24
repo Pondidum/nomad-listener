@@ -14,6 +14,7 @@ func readFlags(ctx context.Context, args []string) (*Options, error) {
 	addr := flags.String("nomad-addr", os.Getenv("NOMAD_ADDR"), "e.g. https://localhost:4646")
 	topics := flags.StringSlice("topics", []string{}, "e.g. job:redis")
 	namespace := flags.String("namespace", "", "the namespace to filter to")
+	failFast := flags.Bool("fail-fast", false, "stop when a handler encounters an error")
 
 	if err := flags.Parse(args); err != nil {
 		return nil, err
@@ -38,10 +39,11 @@ func readFlags(ctx context.Context, args []string) (*Options, error) {
 
 	return &Options{
 		StreamAddr: nomadAddr.String(),
+		FailFast:   *failFast,
 	}, nil
-
 }
 
 type Options struct {
 	StreamAddr string
+	FailFast   bool
 }
