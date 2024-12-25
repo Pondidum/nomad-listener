@@ -26,21 +26,33 @@ func runMain(ctx context.Context, args []string) error {
 		return err
 	}
 
+	handlers, err := scanHandlers(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = readEvents(ctx, opts, func(ctx context.Context, event json.RawMessage) error {
+		return processEvent(ctx, handlers, event)
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func readEvents(ctx context.Context, opts *Options, onEvent func(ctx context.Context, event json.RawMessage) error) error {
+
 	addr, err := buildUrl(ctx, opts)
 	if err != nil {
 		return err
 	}
 
-	resp, err := http.Get(addr)
+	resp, err := http.Get(addr.String())
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-
-	handlers, err := scanHandlers(ctx)
-	if err != nil {
-		return err
-	}
 
 	reader := bufio.NewReader(resp.Body)
 	for {
@@ -55,7 +67,7 @@ func runMain(ctx context.Context, args []string) error {
 		}
 
 		for _, event := range events.Events {
-			if err := processEvent(ctx, handlers, event); err != nil {
+			if err := onEvent(ctx, event); err != nil {
 				if opts.FailFast {
 					return err
 				}
@@ -67,11 +79,11 @@ func runMain(ctx context.Context, args []string) error {
 
 }
 
-func buildUrl(ctx context.Context, opt *Options) (string, error) {
+func buildUrl(ctx context.Context, opt *Options) (*url.URL, error) {
 
 	nomadAddr, err := url.Parse(opt.NomadAddr)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	nomadAddr = nomadAddr.JoinPath("v1/event/stream")
@@ -86,7 +98,7 @@ func buildUrl(ctx context.Context, opt *Options) (string, error) {
 
 	nomadAddr.RawQuery = query.Encode()
 
-	return nomadAddr.String(), nil
+	return nomadAddr, nil
 }
 
 func processEvent(ctx context.Context, handlers map[string]string, event json.RawMessage) error {
