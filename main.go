@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -25,7 +26,12 @@ func runMain(ctx context.Context, args []string) error {
 		return err
 	}
 
-	resp, err := http.Get(opts.StreamAddr)
+	addr, err := buildUrl(ctx, opts)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Get(addr)
 	if err != nil {
 		return err
 	}
@@ -59,6 +65,28 @@ func runMain(ctx context.Context, args []string) error {
 		}
 	}
 
+}
+
+func buildUrl(ctx context.Context, opt *Options) (string, error) {
+
+	nomadAddr, err := url.Parse(opt.NomadAddr)
+	if err != nil {
+		return "", err
+	}
+
+	nomadAddr = nomadAddr.JoinPath("v1/event/stream")
+	query := nomadAddr.Query()
+
+	if opt.Namespace != "" {
+		query.Add("namespace", opt.Namespace)
+	}
+	for _, filter := range opt.Topics {
+		query.Add("topic", filter)
+	}
+
+	nomadAddr.RawQuery = query.Encode()
+
+	return nomadAddr.String(), nil
 }
 
 func processEvent(ctx context.Context, handlers map[string]string, event json.RawMessage) error {

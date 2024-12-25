@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"net/url"
 	"os"
 
 	"github.com/spf13/pflag"
@@ -20,30 +19,17 @@ func readFlags(ctx context.Context, args []string) (*Options, error) {
 		return nil, err
 	}
 
-	nomadAddr, err := url.Parse(*addr)
-	if err != nil {
-		return nil, err
-	}
-
-	nomadAddr = nomadAddr.JoinPath("v1/event/stream")
-	query := nomadAddr.Query()
-
-	if namespace != nil && *namespace != "" {
-		query.Add("namespace", *namespace)
-	}
-	for _, filter := range *topics {
-		query.Add("topic", filter)
-	}
-
-	nomadAddr.RawQuery = query.Encode()
-
 	return &Options{
-		StreamAddr: nomadAddr.String(),
-		FailFast:   *failFast,
+		NomadAddr: *addr,
+		Topics:    *topics,
+		Namespace: *namespace,
+		FailFast:  *failFast,
 	}, nil
 }
 
 type Options struct {
-	StreamAddr string
-	FailFast   bool
+	NomadAddr string
+	Topics    []string
+	Namespace string
+	FailFast  bool
 }
