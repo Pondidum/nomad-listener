@@ -42,6 +42,11 @@ func runMain(ctx context.Context, args []string) error {
 		return err
 	}
 
+	if opts.Version {
+		fmt.Println(version())
+		return nil
+	}
+
 	handlers, err := scanHandlers(ctx)
 	if err != nil {
 		return err

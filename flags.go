@@ -17,6 +17,7 @@ func readFlags(ctx context.Context, args []string) (*Options, error) {
 	topics := flags.StringSlice("topics", []string{}, "e.g. job:redis")
 	namespace := flags.String("namespace", "", "the namespace to filter to")
 	failFast := flags.Bool("fail-fast", false, "stop when a handler encounters an error")
+	version := flags.Bool("version", false, "print the version number and exit")
 
 	if err := flags.Parse(args); err != nil {
 		return nil, err
@@ -34,6 +35,7 @@ func readFlags(ctx context.Context, args []string) (*Options, error) {
 		Topics:    *topics,
 		Namespace: *namespace,
 		FailFast:  *failFast,
+		Version:   *version,
 	}, nil
 }
 
@@ -42,4 +44,5 @@ type Options struct {
 	Topics    []string
 	Namespace string
 	FailFast  bool
+	Version   bool
 }

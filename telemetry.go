@@ -24,7 +24,7 @@ func configureTelemetry(ctx context.Context) *sdktrace.TracerProvider {
 		resource.WithFromEnv(),
 		resource.WithAttributes(
 			semconv.ServiceName("nomad-listener"),
-			semconv.ServiceVersion("dev"),
+			semconv.ServiceVersion(version()),
 		),
 	)
 
