@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
@@ -42,4 +44,21 @@ func traceError(span trace.Span, err error) error {
 	span.SetStatus(codes.Error, err.Error())
 
 	return err
+}
+
+func traceParent(span trace.Span) string {
+
+	sc := span.SpanContext()
+	flags := sc.TraceFlags() & trace.FlagsSampled
+
+	traceID := sc.TraceID()
+	spanID := sc.SpanID()
+	flagByte := [1]byte{byte(flags)}
+
+	return fmt.Sprintf("00-%s-%s-%s",
+		traceID,
+		spanID,
+		hex.EncodeToString(flagByte[:]),
+	)
+
 }
