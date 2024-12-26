@@ -10,16 +10,29 @@ import (
 	"os"
 	"os/exec"
 	"path"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
+var tr trace.Tracer
+
 func main() {
-	if err := runMain(context.Background(), os.Args[:]); err != nil {
+	ctx := context.Background()
+	tracerProvider := configureTelemetry(ctx)
+	defer tracerProvider.Shutdown(context.Background())
+
+	tr = tracerProvider.Tracer("nomad-listener")
+
+	if err := runMain(ctx, os.Args[:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
 func runMain(ctx context.Context, args []string) error {
+	ctx, span := tr.Start(ctx, "main")
+	defer span.End()
 
 	opts, err := readFlags(ctx, args)
 	if err != nil {
@@ -31,22 +44,73 @@ func runMain(ctx context.Context, args []string) error {
 		return err
 	}
 
-	err = readEvents(ctx, opts, func(ctx context.Context, event json.RawMessage) error {
-		return processEvent(ctx, handlers, event)
-	})
-	if err != nil {
+	if err := readEvents(ctx, opts, withTrace(withEventProcessor(handlers))); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func readEvents(ctx context.Context, opts *Options, onEvent func(ctx context.Context, event json.RawMessage) error) error {
+type EventHandler = func(ctx context.Context, event json.RawMessage) error
+
+func withTrace(other EventHandler) EventHandler {
+	return func(ctx context.Context, event json.RawMessage) error {
+		ctx, span := tr.Start(ctx, "onEvent", trace.WithNewRoot())
+		defer span.End()
+
+		return other(ctx, event)
+	}
+}
+
+func withEventProcessor(handlers map[string]string) EventHandler {
+
+	return func(ctx context.Context, event json.RawMessage) error {
+		eventKey, err := getEventKey(event)
+		if err != nil {
+			return err
+		}
+
+		handler, found := handlers[eventKey]
+		if !found {
+			return nil
+		}
+
+		fmt.Println("-->", handler)
+
+		tmp, err := os.CreateTemp("", "nomad-event-*.json")
+		if err != nil {
+			return err
+		}
+		defer tmp.Close() // just in case we error before the real .Close() call
+
+		if _, err := tmp.Write(event); err != nil {
+			return err
+		}
+		tmp.Close()
+
+		cmd := exec.CommandContext(ctx, handler, tmp.Name())
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+
+		return nil
+
+	}
+}
+
+func readEvents(ctx context.Context, opts *Options, onEvent EventHandler) error {
+	ctx, span := tr.Start(ctx, "read_events")
+	defer span.End()
 
 	addr, err := buildUrl(ctx, opts)
 	if err != nil {
 		return err
 	}
+
+	span.SetAttributes(attribute.String("nomad.addr", addr.String()))
 
 	resp, err := http.Get(addr.String())
 	if err != nil {
@@ -99,41 +163,6 @@ func buildUrl(ctx context.Context, opt *Options) (*url.URL, error) {
 	nomadAddr.RawQuery = query.Encode()
 
 	return nomadAddr, nil
-}
-
-func processEvent(ctx context.Context, handlers map[string]string, event json.RawMessage) error {
-	eventKey, err := getEventKey(event)
-	if err != nil {
-		return err
-	}
-
-	handler, found := handlers[eventKey]
-	if !found {
-		return nil
-	}
-
-	fmt.Println("-->", handler)
-
-	tmp, err := os.CreateTemp("", "nomad-event-*.json")
-	if err != nil {
-		return err
-	}
-	defer tmp.Close() // just in case we error before the real .Close() call
-
-	if _, err := tmp.Write(event); err != nil {
-		return err
-	}
-	tmp.Close()
-
-	cmd := exec.CommandContext(ctx, handler, tmp.Name())
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func scanHandlers(ctx context.Context) (map[string]string, error) {
