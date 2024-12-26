@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -135,6 +136,7 @@ func readEvents(ctx context.Context, opts *Options, onEvent EventHandler) error 
 	}
 
 	span.SetAttributes(attribute.String("nomad.addr", addr.String()))
+	fmt.Printf("    Listening to events from %s\n", addr.String())
 
 	resp, err := http.Get(addr.String())
 	if err != nil {
@@ -196,9 +198,14 @@ func buildUrl(ctx context.Context, opt *Options) (*url.URL, error) {
 }
 
 func scanHandlers(ctx context.Context) (map[string]string, error) {
+	ctx, span := tr.Start(ctx, "scan_handlers")
+	defer span.End()
+
 	entries, err := os.ReadDir("handlers")
-	if err != nil {
-		return nil, err
+	if os.IsNotExist(err) {
+		entries = []fs.DirEntry{}
+	} else if err != nil {
+		return nil, traceError(span, err)
 	}
 
 	handlers := make(map[string]string, len(entries))
@@ -210,6 +217,13 @@ func scanHandlers(ctx context.Context) (map[string]string, error) {
 
 		handlers[entry.Name()] = path.Join("handlers", entry.Name())
 	}
+
+	span.SetAttributes(
+		attribute.Int("entries.total", len(entries)),
+		attribute.Int("entries.handlers", len(handlers)),
+	)
+
+	fmt.Printf("    Found %v event handlers\n", len(handlers))
 
 	return handlers, nil
 }
