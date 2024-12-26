@@ -19,7 +19,8 @@ import (
 var tr trace.Tracer
 
 func main() {
-	ctx := context.Background()
+	ctx := withSignals(context.Background())
+
 	tracerProvider := configureTelemetry(ctx)
 	defer tracerProvider.Shutdown(context.Background())
 
@@ -143,27 +144,33 @@ func readEvents(ctx context.Context, opts *Options, onEvent EventHandler) error 
 
 	reader := bufio.NewReader(resp.Body)
 	for {
-		line, err := reader.ReadBytes('\n')
-		if err != nil {
-			return err // make this restart the consumption later
-		}
+		select {
+		case <-ctx.Done():
+			return nil
 
-		events := &EventsLine{}
-		if err := json.Unmarshal(line, events); err != nil {
-			return err
-		}
+		default:
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				return err // make this restart the consumption later
+			}
 
-		for _, event := range events.Events {
-			if err := onEvent(ctx, event); err != nil {
-				if opts.FailFast {
-					return err
+			events := &EventsLine{}
+			if err := json.Unmarshal(line, events); err != nil {
+				return err
+			}
+
+			for _, event := range events.Events {
+				if err := onEvent(ctx, event); err != nil {
+					if opts.FailFast {
+						return err
+					}
+
+					fmt.Println("Error:", err.Error())
 				}
-
-				fmt.Println("Error:", err.Error())
 			}
 		}
-	}
 
+	}
 }
 
 func buildUrl(ctx context.Context, opt *Options) (*url.URL, error) {
