@@ -88,6 +88,11 @@ func withEventProcessor(handlers map[string]string) EventHandler {
 		}
 		tmp.Close()
 
+		defer func() {
+			// don't care if this fails really
+			os.Remove(tmp.Name())
+		}()
+
 		cmd := exec.CommandContext(ctx, handler, tmp.Name())
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
