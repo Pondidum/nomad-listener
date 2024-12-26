@@ -12,6 +12,7 @@ import (
 	"path"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -55,7 +56,7 @@ type EventHandler = func(ctx context.Context, event json.RawMessage) error
 
 func withTrace(other EventHandler) EventHandler {
 	return func(ctx context.Context, event json.RawMessage) error {
-		ctx, span := tr.Start(ctx, "onEvent", trace.WithNewRoot())
+		ctx, span := tr.Start(ctx, "on_event", trace.WithNewRoot())
 		defer span.End()
 
 		return other(ctx, event)
@@ -65,12 +66,20 @@ func withTrace(other EventHandler) EventHandler {
 func withEventProcessor(handlers map[string]string) EventHandler {
 
 	return func(ctx context.Context, event json.RawMessage) error {
+		ctx, span := tr.Start(ctx, "process_event")
+		defer span.End()
+
 		eventKey, err := getEventKey(event)
 		if err != nil {
-			return err
+			return traceError(span, err)
 		}
 
 		handler, found := handlers[eventKey]
+
+		span.SetAttributes(
+			attribute.String("event.key", eventKey),
+			attribute.Bool("handler.found", found),
+		)
 		if !found {
 			return nil
 		}
@@ -79,18 +88,25 @@ func withEventProcessor(handlers map[string]string) EventHandler {
 
 		tmp, err := os.CreateTemp("", "nomad-event-*.json")
 		if err != nil {
-			return err
+			return traceError(span, err)
 		}
 		defer tmp.Close() // just in case we error before the real .Close() call
 
+		span.SetAttributes(attribute.String("event.path", tmp.Name()))
+
 		if _, err := tmp.Write(event); err != nil {
-			return err
+			return traceError(span, err)
 		}
-		tmp.Close()
+		if err := tmp.Close(); err != nil {
+			return traceError(span, err)
+		}
+
+		span.SetAttributes(attribute.Bool("event.written", true))
 
 		defer func() {
 			// don't care if this fails really
-			os.Remove(tmp.Name())
+			err := os.Remove(tmp.Name())
+			span.SetAttributes(attribute.Bool("event.cleaned", err == nil))
 		}()
 
 		cmd := exec.CommandContext(ctx, handler, tmp.Name())
@@ -98,11 +114,11 @@ func withEventProcessor(handlers map[string]string) EventHandler {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			return err
+			return traceError(span, err)
 		}
 
+		span.SetStatus(codes.Ok, "")
 		return nil
-
 	}
 }
 

@@ -4,15 +4,17 @@ import (
 	"context"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
-	"go.opentelemetry.io/otel/sdk/trace"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
 
-func configureTelemetry(ctx context.Context) *trace.TracerProvider {
+func configureTelemetry(ctx context.Context) *sdktrace.TracerProvider {
 	exporter, _ := otlptracegrpc.New(ctx)
 	res, _ := resource.New(
 		ctx,
@@ -24,13 +26,20 @@ func configureTelemetry(ctx context.Context) *trace.TracerProvider {
 		),
 	)
 
-	tracerProvider := trace.NewTracerProvider(
-		trace.WithResource(res),
-		trace.WithBatcher(exporter),
+	tracerProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithResource(res),
+		sdktrace.WithBatcher(exporter),
 	)
 
 	otel.SetTracerProvider(tracerProvider)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	return tracerProvider
+}
+
+func traceError(span trace.Span, err error) error {
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+
+	return err
 }

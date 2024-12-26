@@ -5,9 +5,12 @@ import (
 	"os"
 
 	"github.com/spf13/pflag"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func readFlags(ctx context.Context, args []string) (*Options, error) {
+	ctx, span := tr.Start(ctx, "read_flags")
+	defer span.End()
 
 	flags := pflag.NewFlagSet("all", pflag.ContinueOnError)
 	addr := flags.String("nomad-addr", os.Getenv("NOMAD_ADDR"), "e.g. https://localhost:4646")
@@ -18,6 +21,13 @@ func readFlags(ctx context.Context, args []string) (*Options, error) {
 	if err := flags.Parse(args); err != nil {
 		return nil, err
 	}
+
+	span.SetAttributes(
+		attribute.String("nomad.addr", *addr),
+		attribute.StringSlice("topics", *topics),
+		attribute.String("namespace", *namespace),
+		attribute.Bool("failfast", *failFast),
+	)
 
 	return &Options{
 		NomadAddr: *addr,
