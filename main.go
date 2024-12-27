@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -220,7 +221,10 @@ func scanHandlers(ctx context.Context) (map[string]string, error) {
 			continue
 		}
 
-		handlers[entry.Name()] = path.Join("handlers", entry.Name())
+		key := strings.ToLower(entry.Name())
+		location := path.Join("handlers", entry.Name())
+
+		handlers[key] = location
 	}
 
 	span.SetAttributes(
@@ -239,7 +243,7 @@ func getEventKey(raw json.RawMessage) (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf("%s-%s", event.Topic, event.Type), nil
+	return strings.ToLower(fmt.Sprintf("%s-%s", event.Topic, event.Type)), nil
 }
 
 type EventsLine struct {
