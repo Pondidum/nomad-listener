@@ -127,8 +127,8 @@ func withEventProcessor(opts *Options, handlers map[string]string) EventHandler 
 
 		cmd := exec.CommandContext(ctx, handler, tmp.Name())
 		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Stdout = NewIndenter("    ", os.Stdout)
+		cmd.Stderr = NewIndenter("    ", os.Stderr)
 		cmd.Env = append(os.Environ(), "TRACEPARENT="+traceParent(span))
 
 		if err := cmd.Run(); err != nil {
