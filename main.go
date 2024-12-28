@@ -188,8 +188,19 @@ func buildUrl(ctx context.Context, opt *Options) (*url.URL, error) {
 		return nil, err
 	}
 
-	nomadAddr = nomadAddr.JoinPath("v1/event/stream")
-	query := nomadAddr.Query()
+	eventsUrl := nomadAddr.JoinPath("v1/event/stream")
+	query := eventsUrl.Query()
+
+	if !opt.All {
+		res, err := http.Get(nomadAddr.JoinPath("/v1/jobs").String())
+		if err != nil {
+			return nil, err
+		}
+		res.Body.Close()
+		if currentIndex := res.Header.Get("X-Nomad-Index"); currentIndex != "" {
+			query.Add("index", currentIndex)
+		}
+	}
 
 	if opt.Namespace != "" {
 		query.Add("namespace", opt.Namespace)
@@ -198,9 +209,9 @@ func buildUrl(ctx context.Context, opt *Options) (*url.URL, error) {
 		query.Add("topic", filter)
 	}
 
-	nomadAddr.RawQuery = query.Encode()
+	eventsUrl.RawQuery = query.Encode()
 
-	return nomadAddr, nil
+	return eventsUrl, nil
 }
 
 func scanHandlers(ctx context.Context) (map[string]string, error) {
