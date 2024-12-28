@@ -224,6 +224,16 @@ func scanHandlers(ctx context.Context) (map[string]string, error) {
 		key := strings.ToLower(entry.Name())
 		location := path.Join("handlers", entry.Name())
 
+		info, err := entry.Info()
+		if err != nil {
+			return nil, traceError(span, err)
+		}
+
+		if !isExecutable(info.Mode()) {
+			fmt.Printf("--> Warning, %s is not executable, and will fail to run\n", location)
+			continue
+		}
+
 		handlers[key] = location
 	}
 
