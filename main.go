@@ -53,7 +53,7 @@ func runMain(ctx context.Context, args []string) error {
 		return err
 	}
 
-	if err := readEvents(ctx, opts, withTrace(withEventProcessor(handlers))); err != nil {
+	if err := readEvents(ctx, opts, withTrace(withEventProcessor(opts, handlers))); err != nil {
 		return err
 	}
 
@@ -71,18 +71,28 @@ func withTrace(other EventHandler) EventHandler {
 	}
 }
 
-func withEventProcessor(handlers map[string]string) EventHandler {
+func withEventProcessor(opts *Options, handlers map[string]string) EventHandler {
 
-	return func(ctx context.Context, event json.RawMessage) error {
+	return func(ctx context.Context, rawEvent json.RawMessage) error {
 		ctx, span := tr.Start(ctx, "process_event")
 		defer span.End()
 
-		eventKey, err := getEventKey(event)
-		if err != nil {
+		event := &Event{}
+		if err := json.Unmarshal(rawEvent, event); err != nil {
 			return traceError(span, err)
 		}
 
+		eventKey := strings.ToLower(fmt.Sprintf("%s-%s", event.Topic, event.Type))
 		handler, found := handlers[eventKey]
+
+		if opts.Verbose {
+			fmt.Println("-->", event.Topic, event.Type)
+			if found {
+				fmt.Println("   ", "Running", handler)
+			}
+		} else if found {
+			fmt.Println("-->", "Running", handler)
+		}
 
 		span.SetAttributes(
 			attribute.String("event.key", eventKey),
@@ -92,8 +102,6 @@ func withEventProcessor(handlers map[string]string) EventHandler {
 			return nil
 		}
 
-		fmt.Println("-->", handler)
-
 		tmp, err := os.CreateTemp("", "nomad-event-*.json")
 		if err != nil {
 			return traceError(span, err)
@@ -102,7 +110,7 @@ func withEventProcessor(handlers map[string]string) EventHandler {
 
 		span.SetAttributes(attribute.String("event.path", tmp.Name()))
 
-		if _, err := tmp.Write(event); err != nil {
+		if _, err := tmp.Write(rawEvent); err != nil {
 			return traceError(span, err)
 		}
 		if err := tmp.Close(); err != nil {
@@ -256,15 +264,6 @@ func scanHandlers(ctx context.Context) (map[string]string, error) {
 	fmt.Printf("    Found %v event handlers\n", len(handlers))
 
 	return handlers, nil
-}
-
-func getEventKey(raw json.RawMessage) (string, error) {
-	event := &Event{}
-	if err := json.Unmarshal(raw, event); err != nil {
-		return "", err
-	}
-
-	return strings.ToLower(fmt.Sprintf("%s-%s", event.Topic, event.Type)), nil
 }
 
 type EventsLine struct {

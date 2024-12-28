@@ -19,6 +19,7 @@ func readFlags(ctx context.Context, args []string) (*Options, error) {
 	all := flags.Bool("all", false, "read all events as far back as Nomad can give")
 	failFast := flags.Bool("fail-fast", false, "stop when a handler encounters an error")
 	version := flags.Bool("version", false, "print the version number and exit")
+	verbose := flags.Bool("verbose", false, "print about events seen")
 
 	if err := flags.Parse(args); err != nil {
 		return nil, err
@@ -37,6 +38,7 @@ func readFlags(ctx context.Context, args []string) (*Options, error) {
 		Namespace: *namespace,
 		All:       *all,
 		FailFast:  *failFast,
+		Verbose:   *verbose,
 		Version:   *version,
 	}, nil
 }
@@ -47,5 +49,6 @@ type Options struct {
 	Namespace string
 	All       bool
 	FailFast  bool
+	Verbose   bool
 	Version   bool
 }
