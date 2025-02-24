@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"os"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
@@ -17,6 +18,11 @@ import (
 )
 
 func configureTelemetry(ctx context.Context) *sdktrace.TracerProvider {
+
+	if val := os.Getenv("OTEL_SDK_DISABLED"); val == "true" {
+		return sdktrace.NewTracerProvider()
+	}
+
 	exporter, _ := otlptracegrpc.New(ctx)
 	res, _ := resource.New(
 		ctx,
